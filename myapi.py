@@ -18,9 +18,9 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True,  index=True)
-    name = Column(String(100), nullable=False)
-    email = Column(String(100), nullable=False, unique=True)
-    role = Column(String(100), nullable=False)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False, unique=True)
+    role = Column(String, nullable=False)
 
 Base.metadata.create_all(engine)
 
@@ -30,11 +30,47 @@ class UserCreate(BaseModel):
     email:str
     role:str
 
-class UserResponse
+class UserResponse(BaseModel):
+    id:int
+    name:str
+    email:str
+    role:str
 
+    class Config:
+        from_attributes = True
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+get_db()
 
 
 #Endpoints
 @app.get("/")
 def root():
     return {"message": "Intro to FastAPI x SQLAlchemy"}
+
+@app.get("/users/{user_id}", response_model=UserResponse)
+def get_user(user_id:int, db:Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found!")
+    
+
+@app.post("/users/", response_model=UserResponse)
+def create_user(user: UserCreate, db:Session = Depends(get_db)):
+    if db.query(User).filter(User.email == user.email).first():
+        raise HTTPException(status_code=404, detail="Email already registered")
+    
+    # Create a new user
+    new_user = User(**user.model_dump())
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
